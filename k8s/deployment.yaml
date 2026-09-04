@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: materiais-app
+  labels:
+    app: materiais-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: materiais-app
+  template:
+    metadata:
+      labels:
+        app: materiais-app
+    spec:
+      containers:
+        - name: materiais-app
+          image: <DOCKERHUB_USUARIO>/desafio-kubernetes:v1
+          ports:
+            - containerPort: 5000
+          env:
+            # Valor não sensível vindo do ConfigMap
+            - name: AMBIENTE
+              valueFrom:
+                configMapKeyRef:
+                  name: materiais-config
+                  key: AMBIENTE
+            # Valor sensível (fictício) vindo do Secret
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: materiais-secret
+                  key: APP_SECRET

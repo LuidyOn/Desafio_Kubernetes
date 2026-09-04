@@ -1,0 +1,18 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Arquivos sensíveis (nunca versionar credenciais reais)
+.env
+*.pem
+*.key
+.aws/
+kubeconfig*
+
+# Editor / sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
