@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: materiais-app
-          image: <DOCKERHUB_USUARIO>/desafio-kubernetes:v1
+          image: luidyon/desafio-kubernetes:v1
           ports:
             - containerPort: 5000
           env:
