@@ -1,0 +1,223 @@
+EVIDENCIAS TEXTUAIS — FASE 3 / AMAZON EKS
+Inicio: 2026-09-07T16:54:39.7147214-03:00
+Cluster: desafio-kubernetes
+Regiao: us-east-1
+Contexto: desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io
+Namespace: default
+Registro de consultas e validacoes reais, organizado por assunto. Horarios preservados; conteudo do Secret omitido.
+
+1. Acesso ao cluster
+
+Horario: 2026-09-07T16:54:39.8082397-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default --request-timeout=20s get nodes
+NAME                            STATUS   ROLES    AGE    VERSION
+ip-192-168-33-60.ec2.internal   Ready    <none>   113m   v1.34.10-eks-cb19647
+
+Horario: 2026-09-07T16:54:42.1531763-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default --request-timeout=20s get nodes -L node.kubernetes.io/instance-type,eks.amazonaws.com/nodegroup
+NAME                            STATUS   ROLES    AGE    VERSION                INSTANCE-TYPE   NODEGROUP
+ip-192-168-33-60.ec2.internal   Ready    <none>   113m   v1.34.10-eks-cb19647   t3.small        workers
+
+2. ConfigMap e Secret — existencia, sem conteudo
+
+Horario: 2026-09-07T16:54:44.4312931-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default --request-timeout=20s get configmaps
+NAME               DATA   AGE
+kube-root-ca.crt   1      118m
+materiais-config   1      33m
+
+Horario: 2026-09-07T16:54:46.5966052-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default --request-timeout=20s get secrets
+NAME               TYPE     DATA   AGE
+materiais-secret   Opaque   1      33m
+
+2.1 Validacao das variaveis dentro do container
+Horario: 2026-09-07T16:56:10.9077630-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default exec deployment/materiais-app -- printenv AMBIENTE
+demonstracao
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default exec deployment/materiais-app -- python -c "import os; print('APP_SECRET=configurado' if os.environ.get('APP_SECRET') else 'APP_SECRET=ausente')"
+APP_SECRET=configurado
+
+3. Deployment e Pods — estado inicial
+
+Horario: 2026-09-07T16:54:48.8993556-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default --request-timeout=20s get deployments
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+materiais-app   2/2     2            2           30m
+
+Horario: 2026-09-07T16:54:51.3374593-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default --request-timeout=20s get pods -o wide
+NAME                             READY   STATUS    RESTARTS   AGE   IP               NODE                            NOMINATED NODE   READINESS GATES
+materiais-app-86c5fbbcc9-mpvpb   1/1     Running   0          30m   192.168.44.53    ip-192-168-33-60.ec2.internal   <none>           <none>
+materiais-app-86c5fbbcc9-r4s2l   1/1     Running   0          30m   192.168.60.179   ip-192-168-33-60.ec2.internal   <none>           <none>
+
+4. Service LoadBalancer
+
+Horario: 2026-09-07T16:54:53.6961690-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default --request-timeout=20s get services
+NAME                TYPE           CLUSTER-IP      EXTERNAL-IP                                                               PORT(S)        AGE
+kubernetes          ClusterIP      10.100.0.1      <none>                                                                    443/TCP        118m
+materiais-service   LoadBalancer   10.100.140.24   a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com   80:31179/TCP   23m
+
+Horario: 2026-09-07T16:54:55.8438290-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default --request-timeout=20s describe service materiais-service
+Name:                     materiais-service
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=materiais-app
+Type:                     LoadBalancer
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.100.140.24
+IPs:                      10.100.140.24
+LoadBalancer Ingress:     a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com
+Port:                     http  80/TCP
+TargetPort:               5000/TCP
+NodePort:                 http  31179/TCP
+Endpoints:                192.168.60.179:5000,192.168.44.53:5000
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Internal Traffic Policy:  Cluster
+Events:
+  Type    Reason                Age   From                Message
+  ----    ------                ----  ----                -------
+  Normal  EnsuringLoadBalancer  21m   service-controller  Ensuring load balancer
+  Normal  EnsuredLoadBalancer   21m   service-controller  Ensured load balancer
+
+5. Teste HTTP externo — GET /
+Endereco obtido de service/materiais-service nesta consulta: a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com
+Horario: 2026-09-07T16:56:19.8732846-03:00
+> Invoke-WebRequest -Uri 'http://a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com/' -TimeoutSec 20 -MaximumRedirection 0
+Status HTTP: 200 OK
+{"ambiente":"demonstracao","aplicacao":"Materiais Hospitalares","secret_configurado":true,"status":"online"}
+
+6. Teste HTTP externo — GET /health
+Horario: 2026-09-07T16:56:20.4490521-03:00
+> Invoke-WebRequest -Uri 'http://a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com/health' -TimeoutSec 20 -MaximumRedirection 0
+Status HTTP: 200 OK
+{"status":"ok"}
+
+7. Self-healing — exclusao de APENAS UM Pod
+Horario anterior a exclusao: 2026-09-07T16:58:12.2413354-03:00
+Deployment verificado: materiais-app; replicas desejadas=2; prontas=2; disponiveis=2; imagem=luidyon/desafio-kubernetes:v1
+Cadeia de propriedade verificada: Deployment materiais-app -> ReplicaSet -> cada um dos 2 Pods.
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default get pods -l app=materiais-app -o json
+Resumo dos campos retornados, ANTES da exclusao:
+NAME                           READY STATUS  IP             NODE
+----                           ----- ------  --             ----
+materiais-app-86c5fbbcc9-mpvpb 1/1   Running 192.168.44.53  ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-r4s2l 1/1   Running 192.168.60.179 ip-192-168-33-60.ec2.internal
+Nomes antes: materiais-app-86c5fbbcc9-mpvpb, materiais-app-86c5fbbcc9-r4s2l
+Pod selecionado para exclusao unica: materiais-app-86c5fbbcc9-mpvpb
+Inicio da medicao: 2026-09-07T16:58:12.3200384-03:00
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default delete pod materiais-app-86c5fbbcc9-mpvpb --wait=false
+pod "materiais-app-86c5fbbcc9-mpvpb" deleted from default namespace
+
+Consulta apos exclusao: 2026-09-07T16:58:16.8159450-03:00; decorrido=4.5 s
+> kubectl get pods -l app=materiais-app -o json (mesmo contexto e namespace; resumo dos campos retornados)
+NAME                           READY STATUS      IP             NODE
+----                           ----- ------      --             ----
+materiais-app-86c5fbbcc9-mpvpb 1/1   Terminating 192.168.44.53  ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-prtkp 1/1   Running     192.168.60.154 ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-r4s2l 1/1   Running     192.168.60.179 ip-192-168-33-60.ec2.internal
+
+Consulta apos exclusao: 2026-09-07T16:58:23.0470418-03:00; decorrido=10.7 s
+> kubectl get pods -l app=materiais-app -o json (mesmo contexto e namespace; resumo dos campos retornados)
+NAME                           READY STATUS      IP             NODE
+----                           ----- ------      --             ----
+materiais-app-86c5fbbcc9-mpvpb 1/1   Terminating 192.168.44.53  ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-prtkp 1/1   Running     192.168.60.154 ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-r4s2l 1/1   Running     192.168.60.179 ip-192-168-33-60.ec2.internal
+
+Consulta apos exclusao: 2026-09-07T16:58:28.7337282-03:00; decorrido=16.4 s
+> kubectl get pods -l app=materiais-app -o json (mesmo contexto e namespace; resumo dos campos retornados)
+NAME                           READY STATUS      IP             NODE
+----                           ----- ------      --             ----
+materiais-app-86c5fbbcc9-mpvpb 1/1   Terminating 192.168.44.53  ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-prtkp 1/1   Running     192.168.60.154 ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-r4s2l 1/1   Running     192.168.60.179 ip-192-168-33-60.ec2.internal
+
+Consulta apos exclusao: 2026-09-07T16:58:33.4760330-03:00; decorrido=21.2 s
+> kubectl get pods -l app=materiais-app -o json (mesmo contexto e namespace; resumo dos campos retornados)
+NAME                           READY STATUS      IP             NODE
+----                           ----- ------      --             ----
+materiais-app-86c5fbbcc9-mpvpb 1/1   Terminating 192.168.44.53  ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-prtkp 1/1   Running     192.168.60.154 ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-r4s2l 1/1   Running     192.168.60.179 ip-192-168-33-60.ec2.internal
+
+Consulta apos exclusao: 2026-09-07T16:58:37.7869189-03:00; decorrido=25.5 s
+> kubectl get pods -l app=materiais-app -o json (mesmo contexto e namespace; resumo dos campos retornados)
+NAME                           READY STATUS      IP             NODE
+----                           ----- ------      --             ----
+materiais-app-86c5fbbcc9-mpvpb 1/1   Terminating 192.168.44.53  ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-prtkp 1/1   Running     192.168.60.154 ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-r4s2l 1/1   Running     192.168.60.179 ip-192-168-33-60.ec2.internal
+
+Consulta apos exclusao: 2026-09-07T16:58:42.1693343-03:00; decorrido=29.8 s
+> kubectl get pods -l app=materiais-app -o json (mesmo contexto e namespace; resumo dos campos retornados)
+NAME                           READY STATUS      IP             NODE
+----                           ----- ------      --             ----
+materiais-app-86c5fbbcc9-mpvpb 1/1   Terminating 192.168.44.53  ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-prtkp 1/1   Running     192.168.60.154 ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-r4s2l 1/1   Running     192.168.60.179 ip-192-168-33-60.ec2.internal
+
+Consulta apos exclusao: 2026-09-07T16:58:46.5099051-03:00; decorrido=34.2 s
+> kubectl get pods -l app=materiais-app -o json (mesmo contexto e namespace; resumo dos campos retornados)
+NAME                           READY STATUS  IP             NODE
+----                           ----- ------  --             ----
+materiais-app-86c5fbbcc9-prtkp 1/1   Running 192.168.60.154 ip-192-168-33-60.ec2.internal
+materiais-app-86c5fbbcc9-r4s2l 1/1   Running 192.168.60.179 ip-192-168-33-60.ec2.internal
+
+RESULTADO DO SELF-HEALING
+Pod excluido: materiais-app-86c5fbbcc9-mpvpb
+Nomes antes: materiais-app-86c5fbbcc9-mpvpb, materiais-app-86c5fbbcc9-r4s2l
+Novo Pod: materiais-app-86c5fbbcc9-prtkp
+Nomes finais: materiais-app-86c5fbbcc9-prtkp, materiais-app-86c5fbbcc9-r4s2l
+Tempo ate observar 2 Pods ativos 1/1 Running: aproximadamente 4.6 segundos.
+Tempo ate observar exatamente 2 Pods totais, ambos 1/1 Running, sem o excluido: aproximadamente 34.2 segundos.
+Medicao inclui a latencia das consultas e intervalos de 2 segundos; nao representa o instante exato de prontidao.
+Estado final: Deployment READY 2/2, AVAILABLE 2; exatamente 2 Pods 1/1 Running.
+Explicacao: replicas: 2 define o estado desejado. O ReplicaSet gerenciado pelo Deployment reconcilia a quantidade de Pods e cria um substituto para o Pod excluido.
+Somente um Pod foi excluido. Deployment, replicas, YAMLs e infraestrutura AWS foram preservados.
+
+8. Estado final — apos self-healing
+Horario: 2026-09-07T17:00:06.7072838-03:00
+> aws sts get-caller-identity --query Arn --output text (ACCOUNT_ID mascarado no registro)
+arn:aws:iam::<ACCOUNT_ID>:user/desafio-kubernetes-admin
+> aws eks describe-cluster --region us-east-1 --name desafio-kubernetes --query cluster.{name:name,status:status} --output json
+{
+    "name": "desafio-kubernetes",
+    "status": "ACTIVE"
+}
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default get nodes
+NAME                            STATUS   ROLES    AGE    VERSION
+ip-192-168-33-60.ec2.internal   Ready    <none>   118m   v1.34.10-eks-cb19647
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default get deployment materiais-app
+NAME            READY   UP-TO-DATE   AVAILABLE   AGE
+materiais-app   2/2     2            2           35m
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default get pods -l app=materiais-app -o wide
+NAME                             READY   STATUS    RESTARTS   AGE     IP               NODE                            NOMINATED NODE   READINESS GATES
+materiais-app-86c5fbbcc9-prtkp   1/1     Running   0          2m10s   192.168.60.154   ip-192-168-33-60.ec2.internal   <none>           <none>
+materiais-app-86c5fbbcc9-r4s2l   1/1     Running   0          35m     192.168.60.179   ip-192-168-33-60.ec2.internal   <none>           <none>
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default get service materiais-service
+NAME                TYPE           CLUSTER-IP      EXTERNAL-IP                                                               PORT(S)        AGE
+materiais-service   LoadBalancer   10.100.140.24   a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com   80:31179/TCP   29m
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default get endpointslices -l kubernetes.io/service-name=materiais-service -o wide
+NAME                      ADDRESSTYPE   PORTS   ENDPOINTS                       AGE
+materiais-service-mthr2   IPv4          5000    192.168.60.179,192.168.60.154   29m
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default exec materiais-app-86c5fbbcc9-prtkp -- python -c "import os; print('AMBIENTE=' + os.environ.get('AMBIENTE', 'ausente')); print('APP_SECRET=configurado' if os.environ.get('APP_SECRET') else 'APP_SECRET=ausente')"
+AMBIENTE=demonstracao
+APP_SECRET=configurado
+> kubectl --context desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io --namespace default exec materiais-app-86c5fbbcc9-r4s2l -- python -c "import os; print('AMBIENTE=' + os.environ.get('AMBIENTE', 'ausente')); print('APP_SECRET=configurado' if os.environ.get('APP_SECRET') else 'APP_SECRET=ausente')"
+AMBIENTE=demonstracao
+APP_SECRET=configurado
+> Invoke-WebRequest -Uri 'http://a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com/' -TimeoutSec 20 -MaximumRedirection 0 (revalidacao apos self-healing)
+Status HTTP: 200 OK
+{"ambiente":"demonstracao","aplicacao":"Materiais Hospitalares","secret_configurado":true,"status":"online"}
+> Invoke-WebRequest -Uri 'http://a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com/health' -TimeoutSec 20 -MaximumRedirection 0 (revalidacao apos self-healing)
+Status HTTP: 200 OK
+{"status":"ok"}
+Fim da validacao: 2026-09-07T17:00:53.3087067-03:00
+Conclusao: testes tecnicos da Fase 3 concluidos; capturas visuais e documentacao final ainda pendentes.
+Recursos AWS ainda NAO foram removidos. Limpeza PENDENTE de autorizacao posterior. Nenhum commit ou push executado.

@@ -2,8 +2,22 @@
 
 Desafio Modular da disciplina **Computação em Nuvem e Orquestração com Kubernetes**.
 
-**Estado atual:** Fase 1 e Fase 2 concluídas. **Fase 3 — Amazon EKS: PENDENTE.**
-Os resultados locais foram validados manualmente; a implantação e os testes na AWS ainda não foram realizados.
+**Estado atual:** Fases 1 e 2 concluídas. **Fase 3 — Amazon EKS: validação técnica CONCLUÍDA em 07/09/2026.**
+O cluster e a aplicação foram consultados e testados entre 16:54 e 17:00 (UTC−03:00) de 07/09/2026. A documentação acadêmica foi consolidada com as oito capturas existentes e os registros textuais reais. A limpeza AWS foi concluída após os testes.
+
+## Entrega acadêmica
+
+**Universidade Salesiano Espírito Santo**
+
+| Identificador | Integrante |
+|---|---|
+| 6924106557 | Luiz Gabriel de Oliveira Ferreira |
+| 6924106421 | Yahn de Freitas Santos |
+| 6924106679 | Davi dos Santos |
+
+Entrega principal: [Desafio_Kubernetes.pdf](entrega/Desafio_Kubernetes.pdf), com **7 páginas de conteúdo e 4 de anexos**. O ZIP `entrega/Desafio_Kubernetes.zip` é somente um backup: contém o PDF e os arquivos essenciais, preservando a estrutura do projeto e excluindo `.git`, ambientes virtuais, caches e credenciais reais.
+
+O self-healing e os testes HTTP externos foram documentados a partir de `fase3-comandos.txt`, sem criar capturas. A [conferência dos critérios](docs/conferencia-criterios.md) identifica a comprovação de cada item e as ressalvas documentais. O link do GitHub será informado separadamente no campo de texto da entrega.
 
 ## Objetivo
 
@@ -11,7 +25,7 @@ Demonstrar o fluxo de conteinerização e orquestração:
 
 **Aplicação → Docker → Docker Hub → Amazon EKS → Deployment → Service → Acesso externo**
 
-A aplicação funcional é propositalmente simples: uma API sobre materiais hospitalares, sem banco de dados nem regras de negócio. O foco do desafio é empacotar a aplicação com Docker e, na etapa futura, executá-la e gerenciar suas réplicas com Kubernetes.
+A aplicação funcional é propositalmente simples: uma API sobre materiais hospitalares, sem banco de dados nem regras de negócio. O foco do desafio é empacotar a aplicação com Docker, executá-la no Amazon EKS e gerenciar suas réplicas com Kubernetes.
 
 ## Aplicação
 
@@ -21,30 +35,29 @@ A aplicação usa **Python + Flask** e escuta na **porta 5000**.
 |---|---|
 | `GET /` | Retorna o nome da aplicação, o ambiente, o status e a indicação de Secret configurado |
 | `GET /health` | Retorna `{"status": "ok"}` para verificar a resposta da aplicação |
-| `AMBIENTE` | Variável de ambiente; usa `local` como padrão e receberá `demonstracao` pelo ConfigMap no Kubernetes |
+| `AMBIENTE` | Variável de ambiente; usa `local` como padrão e recebe `demonstracao` pelo ConfigMap no Kubernetes |
 | `APP_SECRET` | Variável recebida em tempo de execução; a API informa apenas se ela foi definida |
 
 **O conteúdo do Secret nunca é exposto nas respostas da aplicação.** Os exemplos deste repositório usam somente valores fictícios. A presença de `secret_configurado: true` no teste local confirma o recebimento de `APP_SECRET`, sem revelar seu conteúdo.
 
 ## Arquitetura
 
-O diagrama representa a **arquitetura planejada para a Fase 3**. A imagem já foi publicada no Docker Hub; os recursos dentro do bloco Amazon EKS ainda não foram implantados.
+A arquitetura abaixo foi **efetivamente implantada e validada no Amazon EKS**. O cluster `desafio-kubernetes`, em `us-east-1`, possui um node `t3.small` no grupo `workers`; os dois Pods da aplicação estão nesse mesmo node.
 
 ```mermaid
 flowchart TD
     U["Usuário"]
-    DH["Docker Hub — publicado<br/>luidyon/desafio-kubernetes:v1"]
+    LB["AWS Load Balancer"]
+    DH["Docker Hub<br/>luidyon/desafio-kubernetes:v1"]
 
-    subgraph EKS["Amazon EKS — planejado / PENDENTE"]
-        LB["Load Balancer"]
-        S["Service<br/>materiais-service"]
+    subgraph EKS["Amazon EKS — desafio-kubernetes / us-east-1"]
+        S["Kubernetes Service<br/>materiais-service — 80 → 5000"]
         D["Deployment<br/>materiais-app — 2 réplicas"]
         P1["Pod 1"]
         P2["Pod 2"]
         CM["ConfigMap<br/>materiais-config"]
-        SEC["Secret fictício<br/>materiais-secret"]
+        SEC["Secret<br/>materiais-secret"]
 
-        LB --> S
         S --> P1
         S --> P2
         S -.->|seleciona os Pods gerenciados pelo| D
@@ -57,23 +70,26 @@ flowchart TD
     end
 
     U --> LB
+    LB --> S
     DH -.->|imagem referenciada| D
 ```
 
-O fluxo de acesso previsto é **Usuário → Load Balancer → Service → Pods**. O Deployment define e mantém as duas réplicas; ele não recebe tráfego HTTP. As setas pontilhadas indicam relações de gerenciamento, seleção e configuração.
+O fluxo HTTP é **Usuário → AWS Load Balancer → Service → Pods**. O Deployment define as duas réplicas e gerencia o ReplicaSet responsável por mantê-las; ele não recebe tráfego HTTP. As setas pontilhadas representam relações de gerenciamento, seleção e configuração. Duas réplicas no mesmo node não demonstram tolerância à perda desse node.
 
 ## Estrutura do projeto
 
 | Caminho | Descrição |
 |---|---|
 | `app/` | Código da aplicação (`app.py`) e dependência Flask (`requirements.txt`) |
-| `k8s/` | Manifestos preparados para a futura implantação no Kubernetes |
+| `k8s/` | Manifestos utilizados na implantação no Kubernetes |
 | `k8s/configmap.yaml` | ConfigMap `materiais-config` com `AMBIENTE=demonstracao` |
 | `k8s/secret.yaml` | Secret `materiais-secret` com o valor fictício `APP_SECRET=segredo-ficticio` |
 | `k8s/deployment.yaml` | Imagem publicada, 2 réplicas, porta 5000 e referências ao ConfigMap e ao Secret |
 | `k8s/service.yaml` | Service do tipo LoadBalancer, com porta 80 direcionada à porta 5000 dos Pods |
 | `docs/evidencias/` | Capturas reais da atividade e índice das evidências |
-| `docs/roteiro-documentacao.md` | Esqueleto para preenchimento da documentação acadêmica final |
+| `docs/evidencias/fase3-comandos.txt` | Saídas reais, horários e resultados da validação técnica no EKS |
+| `docs/roteiro-documentacao.md` | Base textual consolidada da documentação acadêmica |
+| `docs/conferencia-criterios.md` | Mapeamento dos critérios, fontes e ressalvas de comprovação |
 | `Dockerfile` | Receita da imagem, baseada em `python:3.12-slim` |
 | `.dockerignore` | Exclusões do contexto de build Docker |
 | `.gitignore` | Exclusões do versionamento, incluindo ambientes Python e arquivos sensíveis |
@@ -90,7 +106,7 @@ O fluxo de acesso previsto é **Usuário → Load Balancer → Service → Pods*
 - Deployment preparado com 2 réplicas, labels e selectors `app: materiais-app`.
 - Service LoadBalancer preparado para expor a porta 80 e encaminhar para a porta 5000.
 
-A conclusão desta fase corresponde à preparação dos arquivos. A aplicação dos manifestos no EKS permanece pendente.
+A conclusão desta fase corresponde à preparação dos arquivos. Os manifestos também foram aplicados no EKS, com os resultados registrados na Fase 3.
 
 ### Execução local sem Docker — referência
 
@@ -186,7 +202,7 @@ As capturas do navegador mostram os corpos das respostas; o status HTTP 200 faz 
 
 ## Evidências
 
-As quatro capturas recebidas foram preservadas em [docs/evidencias](docs/evidencias/README.md). A captura do terminal reúne a listagem de imagens, o container em execução e o push; ela é apresentada uma única vez.
+As oito capturas originais foram analisadas e preservadas em [docs/evidencias](docs/evidencias/README.md). A captura do terminal reúne a listagem de imagens, o container em execução e o push; ela é apresentada uma única vez.
 
 ### Aplicação executada localmente
 
@@ -212,103 +228,170 @@ Comprova a imagem `desafio-kubernetes:v1`, o container em execução com a porta
 
 Comprova a presença da tag `v1` no repositório `luidyon/desafio-kubernetes` do Docker Hub.
 
-### Evidências ainda a coletar
+### Cluster Amazon EKS
 
-- Para complementar o registro local: saídas dos comandos `docker build` e `docker run`, além de consultas que exibam explicitamente o HTTP 200. A execução já foi informada como concluída, mas essas saídas não aparecem nas capturas recebidas.
-- Para a Fase 3: nós do cluster, Deployment aplicado, 2 Pods em execução, Service com endereço externo, respostas pela Internet, variáveis recebidas no Kubernetes, exclusão e recriação de Pod e remoção dos recursos AWS. Nenhuma dessas evidências foi produzida ainda.
+![Consulta DescribeCluster mostrando desafio-kubernetes ACTIVE](docs/evidencias/05-eks-node-ready.png)
+
+Comprova o cluster `desafio-kubernetes` em estado `ACTIVE`. Apesar do nome do arquivo, a imagem não mostra o node Ready; essa comprovação está nas seções 1 e 8 de `fase3-comandos.txt`.
+
+### Deployment e duas réplicas
+
+![Deployment 2/2 e dois Pods 1/1 Running](docs/evidencias/06-deployment-dois-pods.png)
+
+Comprova `materiais-app` com `READY 2/2`, `AVAILABLE 2` e os Pods `prtkp` e `r4s2l` em execução. Os nomes completos permanecem visíveis na captura.
+
+### Variáveis nos dois Pods
+
+![AMBIENTE demonstracao e APP_SECRET configurado nos dois Pods](docs/evidencias/07-configmap-secret-pods.png)
+
+Comprova as variáveis recebidas pelos dois Pods sem revelar o conteúdo do Secret. A listagem dos objetos ConfigMap e Secret está documentada separadamente na seção 2 do registro textual.
+
+### Service LoadBalancer
+
+![Service materiais-service com hostname externo e portas 80 e 5000](docs/evidencias/08-loadbalancer.png)
+
+Comprova o tipo LoadBalancer, o hostname externo, a porta 80, o destino 5000 e os endpoints após a recuperação.
+
+### Evidências textuais e rastreabilidade
+
+O arquivo [fase3-comandos.txt](docs/evidencias/fase3-comandos.txt) registra consultas reais ao cluster, validação segura das variáveis, quatro respostas HTTP 200 e o self-healing com nomes e horários. A seção 7 contém o antes, a exclusão única e a recuperação; a seção 8 contém a confirmação final.
+
+Esse registro histórico foi preservado integralmente, inclusive as observações sobre documentação pendente na data da coleta. A presente entrega resolve a consolidação documental usando as evidências existentes. Não foram criadas capturas de HTTP externo ou self-healing; as saídas reais foram apresentadas como texto no PDF.
+
+As saídas integrais de `docker build` e `docker run` e os cabeçalhos HTTP locais continuam sem registro próprio. A imagem, o container, os corpos JSON locais e a publicação estão comprovados pelas capturas disponíveis. As ressalvas e os critérios correspondentes constam da [conferência](docs/conferencia-criterios.md).
 
 ## Fase 3 — Amazon EKS
 
-**PENDENTE.** Esta seção é um roteiro para execução futura. Nenhuma etapa abaixo foi concluída e nenhum resultado de EKS está registrado.
+**VALIDAÇÃO TÉCNICA CONCLUÍDA.** A criação e a aplicação dos recursos haviam sido realizadas manualmente. Nesta execução, o estado foi consultado novamente, as configurações e os endpoints foram testados, e apenas um Pod foi excluído para comprovar sua recriação automática. Os YAMLs e a quantidade de réplicas não foram alterados.
 
-### Preparação futura
+### Ambiente e estado verificado
 
-1. Instalar/configurar AWS CLI.
-2. Instalar/configurar kubectl.
-3. Acessar ou criar o cluster EKS conforme o roteiro acadêmico.
-4. Configurar o acesso ao cluster e executar `kubectl get nodes`.
-5. Aplicar ConfigMap, Secret, Deployment e Service, nessa ordem.
-6. Verificar 2 Pods em execução, obter o endereço externo e testar a aplicação pela Internet.
-7. Validar `AMBIENTE` e a indicação de `APP_SECRET` recebido no Kubernetes.
-8. Excluir manualmente um Pod e comprovar sua recriação automática.
-9. Remover os recursos AWS ao final e registrar a verificação da limpeza.
+| Item | Resultado observado em 07/09/2026 |
+|---|---|
+| AWS CLI | Autenticação confirmada para `desafio-kubernetes-admin`; identificador da conta omitido |
+| kubectl | Contexto `desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io`, namespace `default` |
+| Cluster | `desafio-kubernetes`, região `us-east-1`, estado `ACTIVE` |
+| Node group | `workers` |
+| Node | `ip-192-168-33-60.ec2.internal`, `Ready`, tipo `t3.small` |
+| Quantidade de nodes | 1 |
+| ConfigMap | `materiais-config`, existente e aplicado |
+| Secret | `materiais-secret`, tipo `Opaque`, existente e aplicado; conteúdo não consultado |
+| Deployment | `materiais-app`, imagem `luidyon/desafio-kubernetes:v1`, `READY 2/2`, `AVAILABLE 2` |
+| Pods finais | `materiais-app-86c5fbbcc9-prtkp` e `materiais-app-86c5fbbcc9-r4s2l`, ambos `1/1 Running` |
+| Configuração nos dois Pods finais | `AMBIENTE=demonstracao` e `APP_SECRET=configurado`, sem revelar o conteúdo do Secret |
+| Service | `materiais-service`, tipo `LoadBalancer`, porta `80`, `targetPort: 5000` |
+| Endpoints finais | `192.168.60.154:5000` e `192.168.60.179:5000` |
 
-### Comandos de referência — ainda não executados
+O Service retornou o hostname abaixo tanto na consulta inicial quanto na confirmação final:
 
-Os placeholders de região, cluster, endereço externo e Pod dependem da execução futura e devem ser preenchidos com os valores reais daquela etapa. Executar somente após preparar e conferir o cluster do roteiro acadêmico.
-
-```powershell
-aws eks update-kubeconfig --region <REGIAO> --name <NOME_DO_CLUSTER>
-kubectl config current-context
-kubectl get nodes
-
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
-
-kubectl get deployment materiais-app
-kubectl get pods -l app=materiais-app
-kubectl get service materiais-service
+```text
+a22cf95f8f7a14db285c7655db7b1447-1519761716.us-east-1.elb.amazonaws.com
 ```
 
-O manifesto do Deployment já referencia `luidyon/desafio-kubernetes:v1`. Após a implantação, será necessário confirmar as duas réplicas em execução. Quando houver endereço externo disponível no Service, testar:
+Esse é o endereço **observado nesta validação**. Em consultas posteriores, obter novamente o hostname do Service em vez de assumir que permaneceu igual.
+
+### Comandos e validação das configurações
+
+Os comandos completos e suas saídas estão em [fase3-comandos.txt](docs/evidencias/fase3-comandos.txt). Todas as operações Kubernetes desta execução usaram explicitamente o contexto do cluster e o namespace `default`. Exemplo de consulta segura, em PowerShell:
 
 ```powershell
-curl.exe -i http://<EXTERNAL-IP>/
-curl.exe -i http://<EXTERNAL-IP>/health
+$contexto = 'desafio-kubernetes-admin@desafio-kubernetes.us-east-1.eksctl.io'
+kubectl --context $contexto -n default get nodes
+kubectl --context $contexto -n default get deployment materiais-app
+kubectl --context $contexto -n default get pods -l app=materiais-app -o wide
+kubectl --context $contexto -n default get service materiais-service
+kubectl --context $contexto -n default get configmap materiais-config
+kubectl --context $contexto -n default get secret materiais-secret
+kubectl --context $contexto -n default describe service materiais-service
+kubectl --context $contexto -n default exec deployment/materiais-app -- printenv AMBIENTE
+
+$verificarSecret = "import os; print('APP_SECRET=configurado' if os.environ.get('APP_SECRET') else 'APP_SECRET=ausente')"
+kubectl --context $contexto -n default exec deployment/materiais-app -- python -c $verificarSecret
 ```
 
-**Resultado esperado, ainda não observado no EKS:** `GET /` com `ambiente: demonstracao` e `secret_configurado: true`; `GET /health` com `status: ok`. Registrar os resultados reais somente após os testes.
+A consulta ao Secret listou apenas seus metadados; o teste dentro dos containers imprimiu somente sua presença. A configuração foi reconfirmada individualmente nos dois Pods finais, incluindo o substituto.
 
-### Recuperação automática dos Pods — teste futuro
+### Acesso externo e health check
+
+Os dois endpoints responderam **HTTP 200 OK antes e depois do teste de recuperação**:
+
+| Endpoint | Resposta observada |
+|---|---|
+| `GET /` | `{"ambiente":"demonstracao","aplicacao":"Materiais Hospitalares","secret_configurado":true,"status":"online"}` |
+| `GET /health` | `{"status":"ok"}` |
+
+Para novas consultas de leitura, obter o endereço diretamente do Kubernetes:
 
 ```powershell
-kubectl get pods -l app=materiais-app
-kubectl delete pod <NOME_DO_POD>
-kubectl get pods -l app=materiais-app -w
+$endereco = kubectl --context $contexto -n default get service materiais-service -o 'jsonpath={.status.loadBalancer.ingress[0].hostname}'
+Invoke-WebRequest -Uri "http://$endereco/" -TimeoutSec 20 -MaximumRedirection 0 | Select-Object StatusCode, Content
+Invoke-WebRequest -Uri "http://$endereco/health" -TimeoutSec 20 -MaximumRedirection 0 | Select-Object StatusCode, Content
 ```
 
-O comportamento esperado é que o ReplicaSet gerenciado pelo Deployment crie outro Pod para manter as 2 réplicas desejadas. Capturar os nomes e estados antes e depois da exclusão e confirmar que há novamente 2 Pods prontos. Encerrar a observação com `Ctrl+C`.
+### Recuperação automática dos Pods — resultado real
 
-### Custos e remoção dos recursos — pendentes
+A propriedade dos Pods foi conferida pela cadeia **Deployment → ReplicaSet → Pods** antes da exclusão. Às 16:58:12 (UTC−03:00), foi iniciada a exclusão de **apenas** `materiais-app-86c5fbbcc9-mpvpb`, com `kubectl delete pod` e `--wait=false`. O segundo Pod foi preservado.
 
-Planejar o tempo de uso do ambiente e acompanhar os custos na AWS durante a Fase 3. Ao terminar os testes e coletar as evidências, seguir o roteiro acadêmico para remover os recursos:
+| Momento | Pods observados |
+|---|---|
+| Antes | `materiais-app-86c5fbbcc9-mpvpb` e `materiais-app-86c5fbbcc9-r4s2l`, ambos `1/1 Running` |
+| Durante | Novo Pod `materiais-app-86c5fbbcc9-prtkp` em `1/1 Running`; o excluído ainda aparecia como `Terminating` |
+| Depois | `materiais-app-86c5fbbcc9-prtkp` e `materiais-app-86c5fbbcc9-r4s2l`, ambos `1/1 Running`; o excluído não estava mais listado |
 
-```powershell
-kubectl delete -f k8s/service.yaml
-kubectl delete -f k8s/deployment.yaml
-kubectl delete -f k8s/secret.yaml
-kubectl delete -f k8s/configmap.yaml
-```
+- **Aproximadamente 4,6 segundos:** primeira observação de dois Pods ativos `1/1 Running`, incluindo o substituto.
+- **Aproximadamente 34,2 segundos:** confirmação de exatamente dois Pods totais, ambos prontos, após o encerramento do Pod excluído.
+- **Estado final:** Deployment `READY 2/2`, `AVAILABLE 2`; dois Pods `1/1 Running`.
 
-Depois, remover o cluster e os demais recursos associados conforme o roteiro. Excluir os manifestos da aplicação não equivale a remover todo o ambiente AWS. Conferir a remoção do Load Balancer e dos demais recursos criados, guardar a evidência da limpeza e preencher os custos efetivamente observados. Nenhum custo ou remoção foi validado nesta etapa.
+Os tempos incluem a latência das consultas e intervalos de espera de 2 segundos. O teste comprova a reposição de um Pod; não mede disponibilidade contínua durante a exclusão. Como o Deployment define `replicas: 2`, seu ReplicaSet reconcilia o estado atual com o desejado e cria o substituto.
+
+O teste está registrado na seção 7 da evidência textual. Os excertos do antes, da exclusão e do resultado foram incorporados ao PDF como saída de comandos, sem criar screenshots ou repetir o teste.
+
+### Custos e remoção dos recursos
+
+**CONCLUÍDA.** Após os testes, `eksctl delete cluster` terminou com `all cluster resources were deleted`. A consulta `eksctl get cluster --region us-east-1` retornou `No clusters found`. Não restaram instâncias EC2 vinculadas ao cluster, Classic Load Balancers ou ELBv2. A Access Key temporária e o usuário/perfil IAM temporário do laboratório também foram removidos.
+
+Os recursos AWS foram removidos após a coleta dos testes e das evidências.
+
+**Recursos AWS removidos e limpeza confirmada.**
 
 ## Checklist
 
-O checklist registra **etapas realizadas**, enquanto a seção de evidências identifica as capturas disponíveis.
+O checklist distingue a conclusão técnica das pendências de entrega e limpeza.
 
 - [x] Aplicação executada localmente
-- [x] GET /
-- [x] GET /health
+- [x] GET / local
+- [x] GET /health local
 - [x] docker build
 - [x] docker run
 - [x] docker images
 - [x] docker ps
 - [x] imagem publicada no Docker Hub
-- [ ] kubectl get nodes
-- [ ] Deployment aplicado no EKS
-- [ ] 2 Pods em execução no EKS
-- [ ] Service LoadBalancer criado
-- [ ] endereço externo funcionando
-- [ ] ConfigMap validado no Kubernetes
-- [ ] Secret validado no Kubernetes
-- [ ] Pod excluído manualmente
-- [ ] novo Pod recriado automaticamente
-- [ ] recursos AWS removidos
+- [x] AWS CLI configurada e autenticação confirmada
+- [x] kubectl configurado para o cluster correto
+- [x] cluster EKS criado e ACTIVE
+- [x] kubectl get nodes — node Ready
+- [x] ConfigMap aplicado
+- [x] Secret aplicado
+- [x] Deployment aplicado no EKS
+- [x] 2 Pods em execução no EKS
+- [x] Service LoadBalancer criado
+- [x] endereço externo funcionando
+- [x] GET / externo — HTTP 200
+- [x] GET /health externo — HTTP 200
+- [x] ConfigMap validado nos dois Pods finais
+- [x] Secret validado nos dois Pods finais, sem revelar o conteúdo
+- [x] apenas um Pod excluído manualmente
+- [x] novo Pod recriado automaticamente
+- [x] Deployment e dois Pods confirmados após a recuperação
+- [x] evidências textuais da Fase 3 salvas
+- [x] oito capturas existentes analisadas e organizadas
+- [x] documentação acadêmica final consolidada com capturas e registros textuais
+- [x] PDF principal e ZIP de backup preparados
+- [x] custos e limpeza AWS conferidos após os testes
+- [x] recursos AWS removidos após a validação
 
 ## Documentação acadêmica final
 
-O [roteiro de documentação](docs/roteiro-documentacao.md) contém um esqueleto para registrar a descrição da aplicação, etapas, arquitetura, comandos, evidências, resultados, dificuldades, aprendizados, limitações e cuidados com custos AWS.
+O [PDF principal](entrega/Desafio_Kubernetes.pdf) consolida a aplicação, Docker e Docker Hub, EKS, arquitetura, réplicas, configurações, acesso externo, self-healing, dificuldades, aprendizados, custos e conclusão. O [roteiro acadêmico](docs/roteiro-documentacao.md) foi atualizado como base textual, e a [conferência dos critérios](docs/conferencia-criterios.md) apresenta a cobertura e as ressalvas.
 
-**Limitações atuais:** a aplicação tem finalidade didática e não implementa regras de negócio nem persistência; a validação concluída cobre o ambiente local e a publicação da imagem. Disponibilidade, acesso externo, configuração e recuperação de Pods no EKS ainda dependem dos testes da Fase 3. Preencher dificuldades, aprendizados e conclusões com base na experiência real, sem antecipar resultados.
+**Limitações:** aplicação didática, sem regras de negócio nem persistência; apenas um node para as duas réplicas; testes pontuais de HTTP e substituição de um Pod. Não foram executados testes de carga, falha do node ou disponibilidade contínua.
